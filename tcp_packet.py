@@ -86,13 +86,13 @@ class TCP():
         print "server: " + str(server_first_packet)
         server_first_packet = pickle.dumps(server_first_packet)
         sock.sendto(server_first_packet, address)
-        z, addr = sock.recvfrom(1024)
-        z = pickle.loads(z)
+        client_second_packet, addr = sock.recvfrom(1024)
+        client_second_packet = pickle.loads(client_second_packet)
 
         print "from client last: ",
-        print z
+        print client_second_packet
 
-        return sock,
+        return sock, client_second_packet, server_first_packet
 
     @staticmethod
     def connect(server_address=('localhost', 10000)):

@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
 import random
+import socket
+import sys
+import pickle
 
 
 class TCPPacket(object):
@@ -7,11 +10,11 @@ class TCPPacket(object):
     Add Documentation here
     """
     SMALLEST_STARTING_SYN = 0
-    HIGHEST_STARTING_SYN = 4294967295
+    HIGHEST_STARTING_SYN = 9000  # 4294967295
 
-    def __init__(self, src_port, dst_port):
-        self.src_port = src_port  # 16bit
-        self.dst_port = dst_port  # 16bit
+    def __init__(self):
+        # self.src_port = src_port  # 16bit
+        # self.dst_port = dst_port  # 16bit
         self.syn = TCPPacket.gen_starting_syn_num()  # 32bit
         self.ack = 0  # 32bit
         self.data_offset = 0  # 4 bits
@@ -38,30 +41,92 @@ class TCPPacket(object):
         self.padding = 0  # as much as needed
 
     def __repr__(self):
-        return "TCPpacket({0}, {1})".format(self.src_port, self.dst_port)
+        return "TCPpacket()"
 
     def __str__(self):
-        return "Source Port: %d, Destination Port:: %d, SYN Number: %d" % (self.src_port, self.dst_port, self.syn)
+        return "SYN Number: %d, ACK Number: %d" \
+               % (self.syn, self.ack)
 
     @staticmethod
     def gen_starting_syn_num():
         return random.randint(TCPPacket.SMALLEST_STARTING_SYN, TCPPacket.HIGHEST_STARTING_SYN)
 
 
-#NOT SURE IF I NEED TO INHERIT THIS MAYBE TCP WILL JUST BE A HELP CLASS
-class TCP(TCPPacket):
 
-    def __init__(self, src_port, dst_port):
-        super(TCP, self).__init__(src_port, dst_port)
+
+#NOT SURE IF I NEED TO INHERIT THIS MAYBE TCP WILL JUST BE A HELP CLASS
+class TCP():
+
+    def __init__(self):
+        #self.server_socket =
+        pass
+
 
     @staticmethod
     def checksum():
         pass
 
     @staticmethod
-    def listen():
-        pass
+    def listen(server_address=('localhost', 10000)):
+        """ Server-side Handshake """
+        # Create a TCP/IP socket
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+        # Bind the socket to the port
+        print >>sys.stderr, 'starting up on %s port %s' % server_address
+        sock.bind(server_address)
+
+        print >> sys.stderr, '\nwaiting to receive message'
+        client_first_packet, address = sock.recvfrom(4096)
+        client_first_packet = pickle.loads(client_first_packet)
+        print "from client first: " + str(client_first_packet)
+        print address
+        server_first_packet = TCPPacket()
+        server_first_packet.ack = client_first_packet.syn + 1
+        print "server: " + str(server_first_packet)
+        server_first_packet = pickle.dumps(server_first_packet)
+        sock.sendto(server_first_packet, address)
+        z, addr = sock.recvfrom(1024)
+        z = pickle.loads(z)
+
+        print "from client last: ",
+        print z
+
+        return sock,
 
     @staticmethod
-    def bind():
-        pass
+    def connect(server_address=('localhost', 10000)):
+
+        # Create a UDP socket
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+        try:
+
+            client_first_packet = TCPPacket()
+            print "client: " + str(client_first_packet)
+            client_first_packet = pickle.dumps(client_first_packet)
+
+            # Send data
+            print >> sys.stderr, 'sending "%s"' % client_first_packet
+            sock.sendto(client_first_packet, server_address)
+
+            # Receive response
+            print >> sys.stderr, 'waiting to receive'
+            server_first_packet, server = sock.recvfrom(4096)
+            server_first_packet = pickle.loads(server_first_packet)
+            print "From server Second: " + str(server_first_packet)
+            temp = server_first_packet.syn + 1  # continue handshake
+            server_first_packet.syn = server_first_packet.ack + 1
+            server_first_packet.ack = temp
+            print "client: " + str(server_first_packet)
+            server_first_packet = pickle.dumps(server_first_packet)
+            sock.sendto(server_first_packet, server)
+            return sock, client_first_packet, server_first_packet
+
+        except Exception as error:
+            print "Something went wrong: " + str(error)
+
+
+    # @staticmethod
+    # def bind():
+    #     pass

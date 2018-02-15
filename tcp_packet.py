@@ -39,6 +39,7 @@ class TCPPacket(object):
         self.options = 0  # 0-320bits, divisible by 32
         #padding - TCP packet must be on a 32bit boundary this ensures that it is the padding is filled with 0's
         self.padding = 0  # as much as needed
+        self.data = ""
 
     def __repr__(self):
         return "TCPpacket()"
@@ -52,50 +53,57 @@ class TCPPacket(object):
         return random.randint(TCPPacket.SMALLEST_STARTING_SYN, TCPPacket.HIGHEST_STARTING_SYN)
 
 
-
-
 #NOT SURE IF I NEED TO INHERIT THIS MAYBE TCP WILL JUST BE A HELP CLASS
-class TCP():
+class TCP(object):
 
     def __init__(self):
-        #self.server_socket =
-        pass
+        self.own_packet = 0
+        self.own_socket = 0
 
+    def send(self):
+        print "ani: " + str(self.own_packet)
 
     @staticmethod
     def checksum():
         pass
 
-    @staticmethod
-    def listen(server_address=('localhost', 10000)):
+    def listen(self, server_address=('localhost', 10000)):
         """ Server-side Handshake """
         # Create a TCP/IP socket
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
-        # Bind the socket to the port
-        print >>sys.stderr, 'starting up on %s port %s' % server_address
-        sock.bind(server_address)
+        try:
+            # Bind the socket to the port
+            print >>sys.stderr, 'starting up on %s port %s' % server_address
+            sock.bind(server_address)
 
-        print >> sys.stderr, '\nwaiting to receive message'
-        client_first_packet, address = sock.recvfrom(4096)
-        client_first_packet = pickle.loads(client_first_packet)
-        print "from client first: " + str(client_first_packet)
-        print address
-        server_first_packet = TCPPacket()
-        server_first_packet.ack = client_first_packet.syn + 1
-        print "server: " + str(server_first_packet)
-        server_first_packet = pickle.dumps(server_first_packet)
-        sock.sendto(server_first_packet, address)
-        client_second_packet, addr = sock.recvfrom(1024)
-        client_second_packet = pickle.loads(client_second_packet)
+            print >> sys.stderr, '\nwaiting to receive message'
+            client_first_packet, address = sock.recvfrom(4096)
+            client_first_packet = pickle.loads(client_first_packet)
+            print "from client first: " + str(client_first_packet)
+            print address
+            server_first_packet = TCPPacket()
+            server_first_packet.ack = client_first_packet.syn + 1
+            print "server: " + str(server_first_packet)
+            server_first_packet = pickle.dumps(server_first_packet)
+            sock.sendto(server_first_packet, address)
+            client_second_packet, addr = sock.recvfrom(1024)
+            client_second_packet = pickle.loads(client_second_packet)
 
-        print "from client last: ",
-        print client_second_packet
+            print "from client last: ",
+            print client_second_packet
 
-        return sock, client_second_packet, server_first_packet
+            self.own_socket = sock
+            temp = client_second_packet.syn
+            client_second_packet.syn = client_second_packet.ack
+            client_second_packet.ack = temp
+            self.own_packet = client_second_packet
 
-    @staticmethod
-    def connect(server_address=('localhost', 10000)):
+        except Exception as error:
+            print "Something went wrong: " + str(error)
+            sock.close()
+
+    def connect(self, server_address=('localhost', 10000)):
 
         # Create a UDP socket
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -121,11 +129,14 @@ class TCP():
             print "client: " + str(server_first_packet)
             server_first_packet = pickle.dumps(server_first_packet)
             sock.sendto(server_first_packet, server)
-            return sock, client_first_packet, server_first_packet
+
+            self.own_socket = sock
+            server_first_packet = pickle.loads(server_first_packet)
+            self.own_packet = server_first_packet
 
         except Exception as error:
             print "Something went wrong: " + str(error)
-
+            sock.close()
 
     # @staticmethod
     # def bind():

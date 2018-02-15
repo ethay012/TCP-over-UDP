@@ -1,85 +1,74 @@
-import socket
+# -*- coding: utf-8 -*-
+import random
 import pickle
 from tcp_packet import TCPPacket
-import sys
-
-# class UDPServer(object):
-#     def __init__(self, host, port):
-#         self._host = host
-#         self._port = port
-#
-#     def __enter__(self):
-#         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-#         sock.bind((self._host, self._port))
-#         self._sock = sock
-#         return sock
-#
-#     def __exit__(self, *exc_info):
-#         if exc_info[0]:
-#             import traceback
-#             traceback.print_exception(*exc_info)
-#         self._sock.close()
-# def connect_server(udp_socket):
-#
-#     ip = "127.0.0.1"
-#     x, addr = udp_socket.recvfrom(1024)
-#     x= pickle.loads(x)
-#     print x
-#     y= TCPPacket(3200, 6594)
-#     y.ack = x.syn + 1
-#     y = pickle.dumps(y)
-#     udp_socket.sendto(addr, y)
-#
-# if __name__ == '__main__':
-#     host = 'localhost'
-#     port = 5566
-#     with UDPServer(host,port) as s:
-#         while True:
-#             ip = "127.0.0.1"
-#             x, addr = s.recvfrom(1024)
-#             x = pickle.loads(x)
-#             print x
-#             y = TCPPacket(3200, 6594)
-#             y.ack = x.syn + 1
-#             port = y.src_port
-#             y = pickle.dumps(y)
-#             s.sendto(y, (addr, port))
-#             x, addr = s.recvfrom(1024)
-#             print x
-#             raw_input()
 import socket
 import sys
 
+SMALLEST_STARTING_SYN = 0
+HIGHEST_STARTING_SIN = 4294967295
+
+
+def gen_starting_syn_num():
+    return random.randint(SMALLEST_STARTING_SYN, HIGHEST_STARTING_SIN)
+
+
+def connection(my_socket, dst_ip):
+    hostname = socket.gethostname()
+    src_ip = socket.gethostbyname(hostname)
+    my_socket.sendto(src_ip, dst_ip)
+
+def connect(udp_socket):
+
+    ip = "127.0.0.1"
+    x = TCPPacket(6594, 3200)
+    port = x.dst_port
+    x = pickle.dumps(x)
+    udp_socket.sendto(x, (ip, port))
+    y, addr = udp_socket.recvfrom(1024)
+    y= pickle.loads(y)
+    print y
+    temp = y.syn + 1
+    y.syn = y.ack + 1
+    y.ack = y.syn
+    y = pickle.dumps(y)
+    udp_socket.sendto(y, addr)
+
+
 def main():
-    # Create a TCP/IP socket
+
+    # Create a UDP socket
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
-    # Bind the socket to the port
     server_address = ('localhost', 10000)
-    print >>sys.stderr, 'starting up on %s port %s' % server_address
-    sock.bind(server_address)
+    message = 'This is the message.  It will be repeated.'
 
-    while True:
-        print >> sys.stderr, '\nwaiting to receive message'
-        x, address = sock.recvfrom(4096)
-        x = pickle.loads(x)
-        print "from client first: " + str(x)
+    try:
 
-        y = TCPPacket(3200, 6594)
-        y.ack = x.syn + 1
-        port = y.src_port
-        print "server: " + str(y)
+        x = TCPPacket(6594, 3200)
+        port = x.dst_port
+        print "client: " + str(x)
+        x = pickle.dumps(x)
+
+        # Send data
+        print >> sys.stderr, 'sending "%s"' % x
+        sent = sock.sendto(x, server_address)
+
+        # Receive response
+        print >> sys.stderr, 'waiting to receive'
+        y, server = sock.recvfrom(4096)
+        y = pickle.loads(y)
+        print "From server Second: " + str(y)
+        temp = y.syn + 1
+        y.syn = y.ack + 1
+        y.ack = temp
+        print "client: " + str(y)
         y = pickle.dumps(y)
-        sent = sock.sendto(y, address)
-        z, addr = sock.recvfrom(1024)
-        z = pickle.loads(z)
+        sock.sendto(y, server)
 
-        print "from client last: ",
-        print z
-
-    sock.close()
-
+    finally:
+        print >> sys.stderr, 'closing socket'
+        sock.close()
 
 if __name__ == '__main__':
     main()
-

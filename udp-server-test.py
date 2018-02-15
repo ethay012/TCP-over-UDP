@@ -63,20 +63,23 @@ def main():
         print >> sys.stderr, '\nwaiting to receive message'
         x, address = sock.recvfrom(4096)
         x = pickle.loads(x)
-        print x
+        print "from client first: " + str(x)
 
         y = TCPPacket(3200, 6594)
         y.ack = x.syn + 1
         port = y.src_port
+        print "server: " + str(y)
         y = pickle.dumps(y)
-        sent = sock.sendto(y, (address, 10000))
+        sent = sock.sendto(y, address)
         z, addr = sock.recvfrom(1024)
         z = pickle.loads(z)
 
-        print >> sys.stderr, z
+        print "from client last: ",
+        print z
 
     sock.close()
 
 
 if __name__ == '__main__':
     main()
+

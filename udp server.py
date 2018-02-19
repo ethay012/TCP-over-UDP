@@ -23,10 +23,9 @@ class UDPServer(object):
 if __name__ == '__main__':
     host = 'localhost'
     port = 5566
-    with UDPServer(host,port) as s:
+    with UDPServer(host, port) as s:
         while True:
             msg, addr = s.recvfrom(1024)
-            msg_string = pickle.loads(msg)
-            print msg_string
+            print msg
 
-            s.sendto(msg, addr)    
+

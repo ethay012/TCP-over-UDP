@@ -19,7 +19,7 @@ def main():
     #     print data
     server = TCP()
     server.listen()
-    print server.own_packet
+    print server.recv()
 
 
 

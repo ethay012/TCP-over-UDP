@@ -8,7 +8,7 @@ from tcp_packet import TCP
 def main():
     client = TCP()
     client.connect()
-    print client.own_packet
+    client.send("hello me")
 
 
 if __name__ == '__main__':

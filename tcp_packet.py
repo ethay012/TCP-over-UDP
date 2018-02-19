@@ -4,6 +4,8 @@ import socket
 import sys
 import pickle
 
+DATA_DIVIDE_LENGTH = 1024
+
 
 class TCPPacket(object):
     """
@@ -58,30 +60,58 @@ class TCP(object):
     def __init__(self, server_address=('localhost', 10000)):
         self.own_packet = TCPPacket()  # last packet of communication.
         self.own_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP socket used for communication.
-        self.server_address = server_address  # Server's address
+        # self.server_address = server_address  # Server's address
         self.receiver_address = ""
-        self.own_address = ""
+        self.own_address = ""  # maybe change listen to listen to own address and to send to receiver
 
+# Every change of the sequence and acknowledgment numbers needs to be changed to add the length of the packet itself too
     def send(self, data):
-
-        checksum_of_data = TCP.checksum(data)
-        self.own_packet.checksum = checksum_of_data
-        self.own_packet.data = data
-        self.own_socket.sendto(self.receiver_address)
-
+        data_parts = TCP.data_divider(data)
+        for data_part in data_parts:
+            self.own_packet.seq += len(data_part)
+            checksum_of_data = TCP.checksum(data_part)
+            self.own_packet.checksum = checksum_of_data
+            self.own_packet.data = data_part
+            packet_to_send = pickle.dumps(self.own_packet)
+            self.own_socket.sendto(packet_to_send, self.receiver_address)
+            answer, address = self.own_socket.recvfrom(1024)
+            answer = pickle.loads(answer)
+            while answer.ack != self.own_packet.seq:
+                packet_to_send = pickle.dumps(self.own_packet)
+                self.own_socket.sendto(packet_to_send, self.receiver_address)
+                answer, address = self.own_socket.recvfrom(1024)
+                answer = pickle.loads(answer)
+                # self.own_packet.ack += len(answer.data) Not sure if needed, Check wireshark
 
     def recv(self):
-        pass
+        data = ""
+        data_part, address = self.own_socket.recvfrom(1024)
+        data_part = pickle.loads(data_part)
+        # self.own_packet.seq += len(data_part.data) Not sure if needed, Check wireshark
+        checksum_value = TCP.checksum(data_part.data)
+        while checksum_value != data_part.checksum:
+            self.own_socket.sendto(self.own_packet, address)
+            data_part, address = self.own_socket.recvfrom(1024)
+            data_part = pickle.loads(data_part)
+            # self.own_packet.seq += len(data_part.data) Not sure if needed, Check wireshark
+            checksum_value = TCP.checksum(data_part.data)
+        data += data_part.data
+        self.own_packet.ack += len(data)
 
-    def listen(self):
+        return data
+
+        # while len(data_part) == 1024
+
+
+    def listen(self, server_address=('localhost', 10000)):
         """ Server-side Handshake """
         # Create a TCP/IP socket
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
         try:
             # Bind the socket to the port
-            print >>sys.stderr, 'starting up on %s port %s' % self.server_address
-            sock.bind(self.server_address)
+            print >>sys.stderr, 'starting up on %s port %s' % server_address
+            sock.bind(server_address)
 
             print >> sys.stderr, '\nwaiting to receive message'
             client_first_packet, address = sock.recvfrom(4096)
@@ -104,12 +134,15 @@ class TCP(object):
             client_second_packet.seq = client_second_packet.ack
             client_second_packet.ack = temp
             self.own_packet = client_second_packet
+            # -------------------- CHECK MAYBE NOT NEEDED --------
+            self.receiver_address = addr
+            self.own_address = server_address
 
         except Exception as error:
             print "Something went wrong: " + str(error)
             sock.close()
 
-    def connect(self): #----------------------------------------------------------------------------server address
+    def connect(self, server_address=('localhost', 10000)):  # -------------------------------------------server address
         """ Client-side Handshake """
         # Create a UDP socket
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -122,7 +155,7 @@ class TCP(object):
 
             # Send data
             print >> sys.stderr, 'sending "%s"' % client_first_packet
-            sock.sendto(client_first_packet, self.server_address)
+            sock.sendto(client_first_packet, server_address)
 
             # Receive response
             print >> sys.stderr, 'waiting to receive'
@@ -139,10 +172,19 @@ class TCP(object):
             self.own_socket = sock
             server_first_packet = pickle.loads(server_first_packet)
             self.own_packet = server_first_packet
+            # -------------------- CHECK MAYBE NOT NEEDED --------
+            self.receiver_address = server_address
+            # self.own_address = ? not really needed for client
 
         except Exception as error:
             print "Something went wrong: " + str(error)
             sock.close()
+
+    @staticmethod
+    def data_divider(data):
+        """Divides the data into a list where each element's length is 1024"""
+        data = [data[i:i + DATA_DIVIDE_LENGTH] for i in range(0, len(data), DATA_DIVIDE_LENGTH)]
+        return data
 
     @staticmethod
     def checksum(data):

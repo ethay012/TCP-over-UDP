@@ -13,7 +13,7 @@ def main():
         tosend=raw_input("enter tetx-->")
         client.send(tosend)
         print client.recv()
-    sys.exsit
+    sys.exsit()
 
 if __name__ == '__main__':
     main()

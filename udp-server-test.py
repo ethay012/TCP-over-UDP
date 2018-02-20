@@ -19,10 +19,11 @@ def main():
     #     print data
     server = TCP()
     server.listen()
-    while(massege!="exsit")
-        print server.recv()
-        server.send(raw_input("enter massage-->"))
-    sys.exsit()
+    # while message != "exit":
+    #     print server.recv()
+    #     server.send(raw_input("enter massage-->"))
+    # sys.exit()
+    print server.recv()
 
 
 if __name__ == '__main__':

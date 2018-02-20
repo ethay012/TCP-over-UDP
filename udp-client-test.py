@@ -9,11 +9,11 @@ def main():
     client = TCP()
     client.connect()
     client.send("hello me")
-    while (tosend!=exsit)
-        tosend=raw_input("enter tetx-->")
-        client.send(tosend)
-        print client.recv()
-    sys.exsit()
+    # while (tosend!=exsit)
+    #     tosend=raw_input("enter tetx-->")
+    #     client.send(tosend)
+    #     print client.recv()
+    # sys.exsit()
 
 if __name__ == '__main__':
     main()

@@ -117,30 +117,28 @@ class TCP(object):
     def listen(self, server_address=('localhost', 10000)):
         """ Server-side Handshake """
         # Create a TCP/IP socket
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
         try:
             # Bind the socket to the port
             print >>sys.stderr, 'starting up on %s port %s' % server_address
-            sock.bind(server_address)
+            self.own_socket.bind(server_address)
 
             print >> sys.stderr, '\nwaiting to receive message'
-            client_first_packet, address = sock.recvfrom(4096)
+            client_first_packet, address = self.own_socket.recvfrom(4096)
             client_first_packet = pickle.loads(client_first_packet)
             print "from client first: " + str(client_first_packet)
             print address
-            server_first_packet = TCPPacket()
+            server_first_packet = self.own_packet
             server_first_packet.ack = client_first_packet.seq + 1
             print "server: " + str(server_first_packet)
             server_first_packet = pickle.dumps(server_first_packet)
-            sock.sendto(server_first_packet, address)
-            client_second_packet, addr = sock.recvfrom(1024)
+            self.own_socket.sendto(server_first_packet, address)
+            client_second_packet, addr = self.own_socket.recvfrom(1024)
             client_second_packet = pickle.loads(client_second_packet)
 
             print "from client last: ",
             print client_second_packet
 
-            self.own_socket = sock
             temp = client_second_packet.seq
             client_second_packet.seq = client_second_packet.ack
             client_second_packet.ack = temp
@@ -151,26 +149,25 @@ class TCP(object):
 
         except Exception as error:
             print "Something went wrong: " + str(error)
-            sock.close()
+            self.own_socket.close()
 
     def connect(self, server_address=('localhost', 10000)):  # -------------------------------------------server address
         """ Client-side Handshake """
         # Create a UDP socket
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
         try:
 
-            client_first_packet = TCPPacket()
+            client_first_packet = self.own_packet
             print "client: " + str(client_first_packet)
             client_first_packet = pickle.dumps(client_first_packet)
 
             # Send data
             print >> sys.stderr, 'sending "%s"' % client_first_packet
-            sock.sendto(client_first_packet, server_address)
+            self.own_socket.sendto(client_first_packet, server_address)
 
             # Receive response
             print >> sys.stderr, 'waiting to receive'
-            server_first_packet, server = sock.recvfrom(4096)
+            server_first_packet, server = self.own_socket.recvfrom(4096)
             server_first_packet = pickle.loads(server_first_packet)
             print "From server Second: " + str(server_first_packet)
             temp = server_first_packet.seq + 1  # continue handshake
@@ -178,9 +175,8 @@ class TCP(object):
             server_first_packet.ack = temp
             print "client: " + str(server_first_packet)
             server_first_packet = pickle.dumps(server_first_packet)
-            sock.sendto(server_first_packet, server)
+            self.own_socket.sendto(server_first_packet, server)
 
-            self.own_socket = sock
             server_first_packet = pickle.loads(server_first_packet)
             self.own_packet = server_first_packet
             # -------------------- CHECK MAYBE NOT NEEDED --------
@@ -189,7 +185,7 @@ class TCP(object):
 
         except Exception as error:
             print "Something went wrong: " + str(error)
-            sock.close()
+            self.own_socket.close()
 
     @staticmethod
     def data_divider(data):
@@ -215,3 +211,4 @@ class TCP(object):
         answer = answer & 0xffff
         answer = answer >> 8 | (answer << 8 & 0xff00)
         return answer
+

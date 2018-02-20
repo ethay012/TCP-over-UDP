@@ -22,7 +22,7 @@ def main():
     while(massege!="exsit")
         print server.recv()
         server.send(raw_input("enter massage-->"))
-    sys.exsit
+    sys.exsit()
 
 
 if __name__ == '__main__':

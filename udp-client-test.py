@@ -13,6 +13,7 @@ def main():
         tosend=raw_input("enter tetx-->")
         client.send(tosend)
         print "you got massage-->" +client.recv()
+    client.send("exsit")
     sys.exsit
 
 if __name__ == '__main__':

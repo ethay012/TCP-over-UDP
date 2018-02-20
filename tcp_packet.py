@@ -75,28 +75,39 @@ class TCP(object):
             packet_to_send = pickle.dumps(self.own_packet)
             self.own_socket.sendto(packet_to_send, self.receiver_address)
             answer, address = self.own_socket.recvfrom(1024)
+            self.own_packet.ack += 1
             answer = pickle.loads(answer)
-            while answer.ack != self.own_packet.seq:
+            while (answer.ack - 1) != self.own_packet.seq:
                 packet_to_send = pickle.dumps(self.own_packet)
                 self.own_socket.sendto(packet_to_send, self.receiver_address)
                 answer, address = self.own_socket.recvfrom(1024)
                 answer = pickle.loads(answer)
-                # self.own_packet.ack += len(answer.data) Not sure if needed, Check wireshark
+                self.own_packet.ack += 1
 
     def recv(self):
         data = ""
-        data_part, address = self.own_socket.recvfrom(1024)
-        data_part = pickle.loads(data_part)
-        # self.own_packet.seq += len(data_part.data) Not sure if needed, Check wireshark
-        checksum_value = TCP.checksum(data_part.data)
-        while checksum_value != data_part.checksum:
-            self.own_socket.sendto(self.own_packet, address)
+
+        while True:
+
             data_part, address = self.own_socket.recvfrom(1024)
             data_part = pickle.loads(data_part)
-            # self.own_packet.seq += len(data_part.data) Not sure if needed, Check wireshark
             checksum_value = TCP.checksum(data_part.data)
-        data += data_part.data
-        self.own_packet.ack += len(data)
+
+            while checksum_value != data_part.checksum:
+
+                self.own_packet.seq += 1
+                self.own_socket.sendto(self.own_packet, address)
+                data_part, address = self.own_socket.recvfrom(1024)
+                data_part = pickle.loads(data_part)
+                checksum_value = TCP.checksum(data_part.data)
+            data += data_part.data
+            self.own_packet.ack += (len(data_part.data) + 1)
+            self.own_packet.seq += 1
+            packet_to_send = pickle.dumps(self.own_packet)
+            self.own_socket.sendto(packet_to_send, address)
+
+            if len(data_part.data) == 0:
+                break
 
         return data
 
@@ -184,8 +195,23 @@ class TCP(object):
     def data_divider(data):
         """Divides the data into a list where each element's length is 1024"""
         data = [data[i:i + DATA_DIVIDE_LENGTH] for i in range(0, len(data), DATA_DIVIDE_LENGTH)]
+        data.append("")
         return data
 
     @staticmethod
-    def checksum(data):
-        return 1
+    def checksum(source_string):
+        sum = 0
+        count_to = (len(source_string) / 2) * 2
+        count = 0
+        while count < count_to:
+            this_val = ord(source_string[count + 1])*256+ord(source_string[count])
+            sum = sum + this_val
+            count = count + 2
+        if count_to < len(source_string):
+            sum = sum + ord(source_string[len(source_string) - 1])
+        sum = (sum >> 16) + (sum & 0xffff)
+        sum = sum + (sum >> 16)
+        answer = ~sum
+        answer = answer & 0xffff
+        answer = answer >> 8 | (answer << 8 & 0xff00)
+        return answer

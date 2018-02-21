@@ -4,30 +4,23 @@ import random
 import pickle
 
 from tcp_packet import TCPPacket
-
-
-SMALLEST_STARTING_SEQ = 0
-HIGHEST_STARTING_SEQ = 4294967295
-
-
-def gen_starting_seq_num():
-    return random.randint(SMALLEST_STARTING_SEQ, HIGHEST_STARTING_SEQ)
-
-
-def connection(my_socket, dst_ip):
-    hostname = socket.gethostname()
-    src_ip = socket.gethostbyname(hostname)
-    my_socket.sendto(src_ip, dst_ip)
-
+import sys
+from tcp_packet import TCP
 
 def main():
-    udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    packet = TCPPacket()
-    print packet.seq
-    packet_string = pickle.dumps(packet)
-    udp_socket.sendto(packet_string, ("127.0.0.1", 5566))
-    x = udp_socket.recv(1024)
-    print x
+    test2 = TCP()
+    test = TCPPacket()
+    test.data = "012345678912341235134651723948712983657862347821389578942yhfjkbdsnvmbnmcxzbvnmawehkjlrbvqkhjwaeblhjkfbskdnvmnx,mc.bnlkjerhstojkhkjASDSBvncmbxz,vbtn,mbskyjl;qawj4y5uiq23hjkbfdszcn,mvb.,cvxmbn;elakweh54jqi2hb3j4kb4awem,v.cmnzbvzxm.,dcnt;pkah4j5klsdv56782364578617823687r6781263874678`2163406127835678634758627834657862347856283465876w78qerfyfuasdihvkjn54[03896uy394hgjbahjgdsurgyu123h54kj43n5jklnribshdyvos76e4756uhjkfzbv"
+    test.data += test.data
+    test.data += test.data
+    test.data += test.data
+    print len(test.data)
+    test.ack = 42949672951231234123
+    test.seq = 123424598677841234
+    test2.own_packet = test
+    print sys.getsizeof(test2, "Not found")
+
+
 
 
 if __name__ == '__main__':

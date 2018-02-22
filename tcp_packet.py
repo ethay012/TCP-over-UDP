@@ -61,6 +61,7 @@ class TCPPacket(object):
 class TCP(object):
 
     def __init__(self):
+        self.status = 1  # socket open or closed
         self.own_packet = TCPPacket()  # last packet of communication.
         #seq will have the last packet send and ack will have the next packet waiting to receive
         self.own_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP socket used for communication.
@@ -74,7 +75,7 @@ class TCP(object):
         return "Own Packet: %s" \
                % self.own_packet
 
-# Every change of the sequence and acknowledgment numbers needs to be changed to add the length of the packet itself too
+    # Every change of the sequence and acknowledgment numbers needs to be changed to add the length of the packet itself too
     def send(self, data):
         try:
             data_parts = TCP.data_divider(data)
@@ -86,14 +87,14 @@ class TCP(object):
                 packet_to_send = pickle.dumps(self.own_packet)
                 self.own_socket.sendto(packet_to_send, self.receiver_address)
                 answer, address = self.own_socket.recvfrom(SENT_SIZE)
-                self.own_packet.ack += 1
+                # self.own_packet.ack += 1
                 answer = pickle.loads(answer)
                 while (answer.ack - 1) != self.own_packet.seq:
                     packet_to_send = pickle.dumps(self.own_packet)
                     self.own_socket.sendto(packet_to_send, self.receiver_address)
                     answer, address = self.own_socket.recvfrom(SENT_SIZE)
                     answer = pickle.loads(answer)
-                    self.own_packet.ack += 1
+                    # self.own_packet.ack += 1
         except socket.error as error:
             print "Socket was closed before executing command. Error is: %s." % error
 
@@ -105,11 +106,13 @@ class TCP(object):
 
                 data_part, address = self.own_socket.recvfrom(SENT_SIZE)
                 data_part = pickle.loads(data_part)
+                if data_part.flag_fin == 1:
+                    self.disconnect()
+                    return "Disconnected"
                 checksum_value = TCP.checksum(data_part.data)
 
                 while checksum_value != data_part.checksum:
 
-                    self.own_packet.seq += 1
                     self.own_socket.sendto(self.own_packet, address)
                     data_part, address = self.own_socket.recvfrom(SENT_SIZE)
                     data_part = pickle.loads(data_part)
@@ -163,6 +166,78 @@ class TCP(object):
         except Exception as error:
             print "Something went wrong: " + str(error)
             self.own_socket.close()
+
+    def close(self):
+        try:
+            self.own_packet.flag_fin = 1
+            # self.own_packet.flag_ack = 1
+            self.own_packet.seq += 1
+            packet_to_send = pickle.dumps(self.own_packet)
+            self.own_socket.sendto(packet_to_send, self.receiver_address)
+            answer, address = self.own_socket.recvfrom(SENT_SIZE)
+            self.own_packet.ack += 1
+            answer = pickle.loads(answer)
+            # while (answer.ack - 1) != self.own_packet.seq:
+            #     packet_to_send = pickle.dumps(self.own_packet)
+            #     self.own_socket.sendto(packet_to_send, self.receiver_address)
+            #     answer, address = self.own_socket.recvfrom(SENT_SIZE)
+            #     answer = pickle.loads(answer)
+            # self.own_packet.ack += 1
+            # self.own_packet.seq += 1
+            # packet_to_send = pickle.dumps(self.own_packet)
+            # self.own_socket.sendto(packet_to_send, self.receiver_address)
+            answer, address = self.own_socket.recvfrom(SENT_SIZE)
+            answer = pickle.loads(answer)
+            if answer.flag_fin != 1:
+                print "The receiver didn't send the fin packet"
+                raise Exception
+            else:
+                self.own_packet.ack += 1
+                self.own_packet.seq += 1
+                packet_to_send = pickle.dumps(self.own_packet)
+                self.own_socket.sendto(packet_to_send, self.receiver_address)
+                self.own_socket.close()
+                self.status = 0
+
+            # while checksum_value != answer.checksum:
+            #     self.own_socket.sendto(self.own_packet, address)
+            #     answer, address = self.own_socket.recvfrom(SENT_SIZE)
+            #     answer = pickle.loads(answer)
+            #     checksum_value = TCP.checksum(answer.data)
+
+            self.own_socket.close()
+        except Exception as error:
+            print "Something went wrong:%s " % error
+
+    def disconnect(self):
+        try:
+            self.own_packet.ack += 1
+            self.own_packet.seq += 1
+            packet_to_send = pickle.dumps(self.own_packet)
+            self.own_socket.sendto(packet_to_send, self.receiver_address)
+            # answer, address = self.own_socket.recvfrom(SENT_SIZE)
+            # answer = pickle.loads(answer)
+            #checksum_value = TCP.checksum(answer.data)
+            # while checksum_value != answer.checksum:
+            #     self.own_socket.sendto(self.own_packet, address)
+            #     answer, address = self.own_socket.recvfrom(SENT_SIZE)
+            #     answer = pickle.loads(answer)
+            #     checksum_value = TCP.checksum(answer.data)
+            self.own_packet.flag_fin = 1
+            self.own_packet.seq += 1
+            packet_to_send = pickle.dumps(self.own_packet)
+            self.own_socket.sendto(packet_to_send, self.receiver_address)
+            answer = self.own_socket.recvfrom(SENT_SIZE)
+            # while (answer.ack - 1) != self.own_packet.seq:
+            #     packet_to_send = pickle.dumps(self.own_packet)
+            #     self.own_socket.sendto(packet_to_send, self.receiver_address)
+            #     answer, address = self.own_socket.recvfrom(SENT_SIZE)
+            #     answer = pickle.loads(answer)
+            # self.own_packet.ack += 1
+            self.own_socket.close()
+            self.status = 0
+        except Exception as error:
+            print "Something went wrong:%s " % error
 
     @staticmethod
     def data_divider(data):

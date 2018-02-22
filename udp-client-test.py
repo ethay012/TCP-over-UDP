@@ -15,6 +15,8 @@ def main():
     with open(r"SentPicture.jpg", 'rb') as my_file:
         my_file = my_file.read()
         client.send(my_file)
+    client.close()
+    print "Goodbye..."
 
 
 if __name__ == '__main__':

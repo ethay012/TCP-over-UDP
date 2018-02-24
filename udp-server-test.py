@@ -4,9 +4,7 @@ from tcp_packet import TCP
 
 def main():
     server = TCP()
-    count = 0
     # while server.status != 0:
-    count += 1
     server.listen()
             # while message != "exit":
             #     print server.recv()
@@ -15,7 +13,7 @@ def main():
     print server
     print server.recv()
     my_file = server.recv()
-    with open(r"ReceivedPicture%d.jpg" % count, 'wb') as my_picture:
+    with open(r"ReceivedPicture.jpg", 'wb') as my_picture:
         my_picture.write(my_file)
         # if server.status == 0:
         #     print "Server Disconnected"

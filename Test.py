@@ -65,6 +65,7 @@ class TCP(object):
         self.own_packet = TCPPacket()  # last packet of communication.
         #seq will have the last packet send and ack will have the next packet waiting to receive
         self.own_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP socket used for communication.
+        self.own_socket.settimeout(3)
         self.receiver_address = ""
         self.own_address = ""  # maybe change listen to listen to own address and to send to receiver
 
@@ -98,6 +99,29 @@ class TCP(object):
         except socket.error as error:
             print "Socket was closed before executing command. Error is: %s." % error
 
+    def send1(self, data):
+        try:
+            data_parts = TCP.data_divider(data)
+            for data_part in data_parts:
+                self.own_packet.seq += len(data_part)
+                checksum_of_data = TCP.checksum(data_part)
+                self.own_packet.checksum = checksum_of_data
+                self.own_packet.data = data_part
+                packet_to_send = pickle.dumps(self.own_packet)
+                self.own_socket.sendto(packet_to_send, self.receiver_address)
+                answer, address = self.own_socket.recvfrom(SENT_SIZE)
+                # self.own_packet.ack += 1
+                answer = pickle.loads(answer)
+                while (answer.ack - 1) != self.own_packet.seq:  # Doesnt get an answer if the info isn't correct
+                #  just waits for ack and if it doesnt come sends again until it does
+                    packet_to_send = pickle.dumps(self.own_packet)
+                    self.own_socket.sendto(packet_to_send, self.receiver_address)
+                    answer, address = self.own_socket.recvfrom(SENT_SIZE)
+                    answer = pickle.loads(answer)
+                    # self.own_packet.ack += 1
+        except socket.error as error:
+            print "Socket was closed before executing command. Error is: %s." % error
+
     def recv(self):
         try:
             data = ""
@@ -113,7 +137,6 @@ class TCP(object):
 
                 while checksum_value != data_part.checksum:
 
-                    self.own_socket.sendto(self.own_packet, address)  # Doesnt send anything!!
                     data_part, address = self.own_socket.recvfrom(SENT_SIZE)
                     data_part = pickle.loads(data_part)  # Doesnt send anything just waits until its correct
                     checksum_value = TCP.checksum(data_part.data)  #

@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 from tcp_packet import TCP
 import sys
-import time
-
+from bcolors import bcolors
 WAIT_FOR_CLOSING = 5
+
 
 def main():
     server = TCP()
@@ -25,22 +25,22 @@ def main():
     # print "Goodbye..."
     name = raw_input("Type your name here --> ").capitalize()
     to_send = "NAME: MESSAGE"
+    print bcolors.WARNING + "Waiting to receive message from friend" + bcolors.ENDC
     while server.status and to_send.split(' ')[1].upper() != "EXIT":
-        print "Waiting to receive message from your friend"
         answer = server.recv()
-        if answer.split(' ')[1].upper() == "EXIT":
+        if answer == "Disconnected":
             break
         else:
-            print answer
-        to_send = name + ": " + raw_input("Type to your friend --> ")
+            print bcolors.OKBLUE + answer + bcolors.ENDC
+        to_send = name + ": " + raw_input(bcolors.OKGREEN + name + ": " + bcolors.ENDC)
+        if to_send.split(' ')[1].upper() == "EXIT":
+            server.close()
+            print "Closed"
+            break
         server.send(to_send)
-    if to_send.split(' ')[1].upper() == "EXIT":
-        server.close()
-        print "Closed"
+
     print "Finished"
     sys.exit()
-
-
 
 
 if __name__ == '__main__':

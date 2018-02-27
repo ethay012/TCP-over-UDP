@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
 from tcp_packet import TCP
 import sys
+from bcolors import bcolors
 
 
 def main():
+    print bcolors.HEADER + "Connecting to server..." + bcolors.ENDC
     client = TCP()
     client.connect()
-    print client
     # client.send("hello me")
     # while (to_send != exit)
     #     to_send=raw_input("enter text-->")
@@ -19,22 +20,21 @@ def main():
     # client.close()
     # print "Goodbye..."
     name = raw_input("Type your name here --> ").capitalize()
+    to_send = "NAME: MESSAGE"
     while True:
-        to_send = name + ": " + raw_input("Type to your friend --> ")
+        to_send = name + ": " + raw_input(bcolors.OKGREEN + name + ": " + bcolors.ENDC)
+        if to_send.split(' ')[1].upper() == "EXIT":
+            client.close()
+            print "Closed"
+            break
         client.send(to_send)
-        print "Waiting to receive message from your friend"
         answer = client.recv()
-        if answer.split(' ')[1].upper() == "EXIT":
+        if answer == "Disconnected":
             break
         else:
-            print answer
-    if to_send.split(' ')[1].upper() == "EXIT":
-        client.send(to_send)
-        client.close()
-        print "Closed"
+            print bcolors.OKBLUE + answer + bcolors.ENDC
     print "Finished"
     sys.exit()
-
 
 
 if __name__ == '__main__':

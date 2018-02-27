@@ -113,6 +113,7 @@ class TCP(object):
 
                 while checksum_value != data_part.checksum:
 
+                    self.own_socket.sendto(self.own_packet, address)  # Doesnt send anything!!
                     data_part, address = self.own_socket.recvfrom(SENT_SIZE)
                     data_part = pickle.loads(data_part)  # Doesnt send anything just waits until its correct
                     checksum_value = TCP.checksum(data_part.data)  #

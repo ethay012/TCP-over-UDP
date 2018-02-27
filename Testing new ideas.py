@@ -8,7 +8,8 @@ DATA_DIVIDE_LENGTH = 1024
 TCP_PACKET_SIZE = 32
 DATA_LENGTH = 1024
 SENT_SIZE = TCP_PACKET_SIZE + DATA_LENGTH + 5000  # Pickled objects take a lot of space
-
+LAST_CONNECTION = -1
+FIRST = 0
 
 class TCPPacket(object):
     """
@@ -65,7 +66,7 @@ class TCP(object):
         self.own_packet = TCPPacket()  # last packet of communication.
         #seq will have the last packet send and ack will have the next packet waiting to receive
         self.own_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP socket used for communication.
-        self.receiver_address = ""
+        self.receiver_address = []
         self.own_address = ""  # maybe change listen to listen to own address and to send to receiver
 
     def __repr__(self):
@@ -75,9 +76,15 @@ class TCP(object):
         return "Own Packet: %s" \
                % self.own_packet
 
-    # Every change of the sequence and acknowledgment numbers needs to be changed to add the length of the packet itself too
-    def send(self, data):
+    # Every change of the sequence and acknowledgment numbers
+    #  needs to be changed to add the length of the packet itself too
+    def send(self, data, connection=None):
         try:
+            if connection not in self.receiver_address:
+                if connection is None:
+                    connection = self.receiver_address[FIRST]
+                else:
+                    return "Connection not in connected devices"
             data_parts = TCP.data_divider(data)
             for data_part in data_parts:
                 data_not_received = True
@@ -89,7 +96,7 @@ class TCP(object):
                 while data_not_received:
                     data_not_received = False
                     try:
-                        self.own_socket.sendto(packet_to_send, self.receiver_address)
+                        self.own_socket.sendto(packet_to_send, connection)
                         answer, address = self.own_socket.recvfrom(SENT_SIZE)
 
                     except socket.timeout:
@@ -135,7 +142,8 @@ class TCP(object):
             print >> sys.stderr, 'starting up on %s port %s' % server_address
             self.own_socket.bind(server_address)
             print >> sys.stderr, '\nwaiting to receive message'
-            answer, self.receiver_address = self.own_socket.recvfrom(SENT_SIZE)
+            answer, address = self.own_socket.recvfrom(SENT_SIZE)
+            self.receiver_address.append(address)
             answer = pickle.loads(answer)
             self.own_packet.ack = answer.seq + 1
             self.own_packet.seq += 1
@@ -145,23 +153,24 @@ class TCP(object):
             answer = pickle.loads(answer)
             self.own_packet.ack = answer.seq + 1
             self.own_address = server_address
+            return self.receiver_address[LAST_CONNECTION]
         except Exception as error:
             print "Something went wrong: " + str(error)
             self.own_socket.close()
 
     def connect(self, server_address=("localhost", 10000)):
         try:
-            self.receiver_address = server_address
+            self.receiver_address.append(server_address)
             first_packet_to_send = pickle.dumps(self.own_packet)
             #  print >> sys.stderr, 'sending "%s"' % self.own_packet
-            self.own_socket.sendto(first_packet_to_send, self.receiver_address)
+            self.own_socket.sendto(first_packet_to_send, self.receiver_address[FIRST])
             answer, address = self.own_socket.recvfrom(SENT_SIZE)
             answer = pickle.loads(answer)
             self.own_packet.ack = answer.seq + 1
             self.own_packet.seq += 1
             second_packet_to_send = pickle.dumps(self.own_packet)
             #  print >> sys.stderr, 'sending "%s"' % self.own_packet
-            self.own_socket.sendto(second_packet_to_send, self.receiver_address)
+            self.own_socket.sendto(second_packet_to_send, self.receiver_address[FIRST])
 
         except Exception as error:
             print "Something went wrong: " + str(error)

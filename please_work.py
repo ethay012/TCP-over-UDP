@@ -95,15 +95,16 @@ class TCPPacket(object):
 
 class TCP(object):
 
-    def __init__(self):
+    def __init__(self, timeout=5):
         self.status = 1  # socket open or closed
         #seq will have the last packet send and ack will have the next packet waiting to receive
         self.own_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP socket used for communication.
-        self.own_socket.settimeout(5)
+        self.own_socket.settimeout(timeout)
         self.connections = {}
         self.connection_queue = []
         self.queue_lock = threading.Lock()
-        self.packets_received = []
+        # each condition will have a dictionary of an address and it's corresponding packet.
+        self.packets_received = {"SYN": {}, "ACK": {}, "SYN-ACK": {}, "FIN": {}, "FIN-ACK": {}, "DATA": {}}
 
     def __repr__(self):
         return "TCP()"
@@ -177,21 +178,15 @@ class TCP(object):
         try:
             while True:
                 try:
-                    print self.connections, self.connection_queue
-                    answer, address = self.own_socket.recvfrom(SENT_SIZE)
-                    answer = pickle.loads(answer)
-                    if self.sort_answers(answer, "SYN", address):
-                        print address, self.connection_queue, self.connections
-                        with self.queue_lock:
-                            if len(self.connection_queue) < max_connections:
-                                self.connection_queue.append((answer, address))
-                            else:
-                                self.own_socket.sendto("Connections full", address)
-                    else:
-                        print "Wrong answer " + str(answer)
-                        answer = self.find_correct_packet("SYN")  # needs to return something
-                except socket.timeout:
-                    pass
+                    answer, address = self.find_correct_packet("SYN")
+
+                    with self.queue_lock:
+                        if len(self.connection_queue) < max_connections:
+                            self.connection_queue.append((answer, address))
+                        else:
+                            self.own_socket.sendto("Connections full", address)
+                except KeyError:
+                    continue
         except socket.error as error:
             print "Something went wrong in listen_handler func! Error is: %s." + str(error)
 
@@ -212,53 +207,40 @@ class TCP(object):
                     self.connections[address].seq += 1
                     self.connections[address].set_flags(ack=True, syn=True)
                     packet_to_send = pickle.dumps(self.connections[address])
-                    self.own_socket.sendto(packet_to_send, address)
-                    self.connections[address].set_flags()
                     #lock address, connections dictionary?
-                    try:
-                        answer, address2 = self.own_socket.recvfrom(SENT_SIZE)
-                        answer = pickle.loads(answer)
-                    except socket.timeout:
-                        answer = "Not found"
-                        address2 = ""
-                        pass
-                    # while address2 != address:
-                    #     self.own_socket.sendto("Connections full", address2)
-                    #     answer, address2 = self.own_socket.recvfrom(SENT_SIZE)
-                    if type(answer) != str and self.sort_answers(answer, "ACK", address2, address):
-                        print str(answer) + " found right"
-                        self.connections[address].ack = answer.seq + 1
-                        return address
-                    else:
-                        answer = "Not found"
-                        while type(answer) == str:
-                            print "finding", str(answer)
+                    packet_not_sent_correctly = True
+                    while packet_not_sent_correctly:
+                        try:
+                            packet_not_sent_correctly = False
+                            self.own_socket.sendto(packet_to_send, address)
                             answer = self.find_correct_packet("ACK", address)
-                        print str(answer) + "here"
-
-                        self.connections[address].ack = answer.seq + 1
-                        return address
+                        except socket.timeout:
+                            packet_not_sent_correctly = True
+                    self.connections[address].set_flags()
+                    self.connections[address].ack = answer.seq + 1
+                    return address
         # except Exception as error:
         #     print "Something went wrong in accept func: " + str(error)
         #     self.own_socket.close()
 
-    def connect(self, server_address=("localhost", 10000)):
+    def connect(self, server_address=("127.0.0.1", 10000)):
         try:
             self.connections[server_address] = TCPPacket()
             self.connections[server_address].set_flags(syn=True)
-            print self.connections[server_address]
             first_packet_to_send = pickle.dumps(self.connections[server_address])
+            print self.connections.keys()[FIRST]
             self.own_socket.sendto(first_packet_to_send, self.connections.keys()[FIRST])
-            answer, address = self.own_socket.recvfrom(SENT_SIZE)
+            self.connections[server_address].set_flags()
+            answer, address = self.find_correct_packet("SYN-ACK", server_address)
             if answer == "Connections full":
                 raise socket.error("Server cant receive any connections right now.")
             answer = pickle.loads(answer)
             self.connections[server_address].ack = answer.seq + 1
             self.connections[server_address].seq += 1
             self.connections[server_address].set_flags(ack=True)
-            print self.connections[server_address]
             second_packet_to_send = pickle.dumps(self.connections[server_address])
             self.own_socket.sendto(second_packet_to_send, self.connections.keys()[FIRST])
+            self.connections[server_address].set_flags()
 
         except socket.error as error:
             print "Something went wrong in connect func: " + str(error)
@@ -362,7 +344,7 @@ class TCP(object):
         return answer
 
     @staticmethod
-    def threader(func, args, join, daemon):
+    def threader(func, args, join=False, daemon=False):
         t = threading.Thread(target=func, args=args)
         if daemon:
             t.daemon = True
@@ -371,26 +353,20 @@ class TCP(object):
             t.join()
 
     # conditions = ["SYN", "SYN-ACK", "ACK", "FIN", "FIN-ACK", "DATA"]
-    def sort_answers(self, packet, condition,  received_address, expected_address="Any"):
-        if expected_address == "Any" and packet.packet_type() == condition:
-            return True
-        if expected_address == received_address and packet.packet_type() == condition:
-            return True
-        else:
-            self.packets_received.append((packet, received_address))
-            return False
+    # packet = (packet,
+    def sort_answers(self, packet, address):
+        self.packets_received[packet.packet_type()][address] = packet
 
-    def find_correct_packet(self, condition, address="Any"):
-        for packet in self.packets_received:
-            if address == "Any" and packet[0].packet_type() == condition:
-                self.packets_received.remove(packet)
-                answer = packet
-                return answer
-            if packet[1] == address and packet[0].packet_type() == condition:
-                self.packets_received.remove(packet)
-                answer = packet[0]
-                return answer
-        return "Not found"
+    def find_correct_packet(self, condition, address=("Any",)):
+        if address[0] == "Any":
+            return self.packets_received[condition].popitem()
+        return self.packets_received[condition].pop(address)
+
+    def central_receive_handler(self):
+        while True:
+            packet, address = self.own_socket.recvfrom(1024)
+            packet = pickle.loads(packet)
+            self.sort_answers(packet, address)
 
 
 

@@ -44,11 +44,15 @@ def main():
     # sys.exit()
     address_list = []
     print "packets", server.packets_received
-    for i in range(3):
-        address_list.append(server.accept())
-        print server.recv(address_list[-1])
-        server.send("hello", address_list[-1])
-        print "Accepted " + str(server.connections)
+    # for i in range(3):
+    address_list.append(server.accept())
+    print server.recv(address_list[-1])
+    server.send("hello", address_list[-1])
+    print "Accepted " + str(server.connections)
+    print server.recv(address_list[-1])
+    for connection in server.connections:
+        server.close(connection)
+    print "Finished"
 
 if __name__ == '__main__':
     main()

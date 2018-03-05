@@ -36,7 +36,8 @@ def main():
     #         print bcolors.OKBLUE + answer + bcolors.ENDC
     # print "Finished"
     # sys.exit()
-    print client.packets_received
+    print client.packets_received, " Here"
+    client.close()
     raw_input("Finished")
 
 

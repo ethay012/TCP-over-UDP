@@ -4,6 +4,7 @@ import socket
 import sys
 import pickle
 import threading
+import time
 
 DATA_DIVIDE_LENGTH = 1024
 TCP_PACKET_SIZE = 32
@@ -59,7 +60,6 @@ class TCPPacket(object):
         return cmp(self.seq, other.seq)
 
     def packet_type(self):
-        packet_type = ""
         if self.flag_syn == 1 and self.flag_ack == 1:
             packet_type = "SYN-ACK"
         elif self.flag_ack == 1 and self.flag_fin == 1:
@@ -70,7 +70,7 @@ class TCPPacket(object):
             packet_type = "ACK"
         elif self.flag_fin == 1:
             packet_type = "FIN"
-        elif self.data != "":
+        else:
             packet_type = "DATA"
         return packet_type
 
@@ -126,45 +126,52 @@ class TCP(object):
             for data_part in data_parts:
                 data_not_received = True
                 checksum_of_data = TCP.checksum(data_part)
-                self.own_packet.checksum = checksum_of_data
-                self.own_packet.data = data_part
-                packet_to_send = pickle.dumps(self.own_packet)
+                self.connections[connection].checksum = checksum_of_data
+                self.connections[connection].data = data_part
+                self.connections[connection].set_flags()
+                packet_to_send = pickle.dumps(self.connections[connection])
                 while data_not_received:
                     data_not_received = False
                     try:
                         self.own_socket.sendto(packet_to_send, connection)
-                        answer, address = self.own_socket.recvfrom(SENT_SIZE)
+                        answer = self.find_correct_packet("ACK", connection)
 
                     except socket.timeout:
                         print "timeout"
                         data_not_received = True
-                self.own_packet.seq += len(data_part)
+                self.connections[connection].seq += len(data_part)
         except socket.error as error:
             print "Socket was closed before executing command. Error is: %s." % error
 
-    def recv(self):
+    def recv(self, connection):
         try:
             data = ""
 
+            if connection not in self.connections.keys():
+                if connection is None:
+                    connection = self.connections.keys()[0]
+                else:
+                    return "Connection not in connected devices"
+
             while True:
 
-                data_part, address = self.own_socket.recvfrom(SENT_SIZE)
-                data_part = pickle.loads(data_part)
-                if data_part.flag_fin == 1:
+                data_part = self.find_correct_packet("DATA", connection)
+                if data_part.packet_type() == "FIN":
                     self.disconnect()
                     return "Disconnected"
                 checksum_value = TCP.checksum(data_part.data)
 
                 while checksum_value != data_part.checksum:
 
-                    data_part, address = self.own_socket.recvfrom(SENT_SIZE)
-                    data_part = pickle.loads(data_part)  # Doesnt send anything just waits until its correct
-                    checksum_value = TCP.checksum(data_part.data)  #
+                    data_part = self.find_correct_packet("DATA", connection)
+                    checksum_value = TCP.checksum(data_part.data)
                 data += data_part.data
-                self.own_packet.ack = data_part.seq + len(data_part.data)
-                self.own_packet.seq += 1  # syn flag is 1 byte
-                packet_to_send = pickle.dumps(self.own_packet)
-                self.own_socket.sendto(packet_to_send, address)  # after receiving correct info sends ack
+                self.connections[connection].ack = data_part.seq + len(data_part.data)
+                self.connections[connection].seq += 1  # syn flag is 1 byte
+                self.connections[connection].set_flags(ack=True)
+                packet_to_send = pickle.dumps(self.connections[connection])
+                self.own_socket.sendto(packet_to_send, connection)  # after receiving correct info sends ack
+                self.connections[connection].set_flags()
 
                 if len(data_part.data) == 0:
                     break
@@ -209,7 +216,7 @@ class TCP(object):
                     packet_to_send = pickle.dumps(self.connections[address])
                     #lock address, connections dictionary?
                     packet_not_sent_correctly = True
-                    while packet_not_sent_correctly:
+                    while packet_not_sent_correctly or answer is None:
                         try:
                             packet_not_sent_correctly = False
                             self.own_socket.sendto(packet_to_send, address)
@@ -228,13 +235,11 @@ class TCP(object):
             self.connections[server_address] = TCPPacket()
             self.connections[server_address].set_flags(syn=True)
             first_packet_to_send = pickle.dumps(self.connections[server_address])
-            print self.connections.keys()[FIRST]
             self.own_socket.sendto(first_packet_to_send, self.connections.keys()[FIRST])
             self.connections[server_address].set_flags()
-            answer, address = self.find_correct_packet("SYN-ACK", server_address)
-            if answer == "Connections full":
+            answer = self.find_correct_packet("SYN-ACK", server_address)
+            if type(answer) == str:  # == "Connections full":
                 raise socket.error("Server cant receive any connections right now.")
-            answer = pickle.loads(answer)
             self.connections[server_address].ack = answer.seq + 1
             self.connections[server_address].seq += 1
             self.connections[server_address].set_flags(ack=True)
@@ -358,15 +363,34 @@ class TCP(object):
         self.packets_received[packet.packet_type()][address] = packet
 
     def find_correct_packet(self, condition, address=("Any",)):
-        if address[0] == "Any":
-            return self.packets_received[condition].popitem()
-        return self.packets_received[condition].pop(address)
+        not_found = True
+        tries = 0
+        while not_found and tries < 2:
+            try:
+                not_found = False
+                if address[0] == "Any":
+                    order = self.packets_received[condition].popitem()  # to reverse the tuple received
+                    return order[1], order[0]
+                if condition == "ACK":
+                    tries += 1
+                return self.packets_received[condition].pop(address)
+            except KeyError:
+                not_found = True
+                time.sleep(0.25)
 
     def central_receive_handler(self):
         while True:
-            packet, address = self.own_socket.recvfrom(1024)
-            packet = pickle.loads(packet)
-            self.sort_answers(packet, address)
+            try:
+                packet, address = self.own_socket.recvfrom(1024)
+                packet = pickle.loads(packet)
+                self.sort_answers(packet, address)
+            except socket.timeout:
+                continue
+
+    def central_receive(self):
+        t = threading.Thread(target=self.central_receive_handler)
+        t.daemon = True
+        t.start()
 
 
 

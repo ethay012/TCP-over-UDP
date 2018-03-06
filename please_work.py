@@ -13,6 +13,7 @@ SENT_SIZE = TCP_PACKET_SIZE + DATA_LENGTH + 5000  # Pickled objects take a lot o
 LAST_CONNECTION = -1
 FIRST = 0
 
+
 class TCPPacket(object):
     """
     Add Documentation here
@@ -53,8 +54,8 @@ class TCPPacket(object):
         return "TCPpacket()"
 
     def __str__(self):
-        return "SEQ Number: %d, ACK Number: %d" \
-               % (self.seq, self.ack)
+        return "SEQ Number: %d, ACK Number: %d, ACK:%d, SYN:%d, FIN:%d, TYPE:%s, DATA:%s" \
+               % (self.seq, self.ack, self.flag_ack, self.flag_syn, self.flag_fin, self.packet_type(), self.data)
 
     def __cmp__(self, other):
         return cmp(self.seq, other.seq)
@@ -205,7 +206,7 @@ class TCP(object):
             print "Something went wrong in listen func! Error is: %s." % str(error)
 
     def accept(self):
-        # try:
+        try:
             while True:
                 if self.connection_queue:
                     with self.queue_lock:
@@ -227,9 +228,9 @@ class TCP(object):
                     self.connections[address].set_flags()
                     self.connections[address].ack = answer.seq + 1
                     return address
-        # except Exception as error:
-        #     print "Something went wrong in accept func: " + str(error)
-        #     self.own_socket.close()
+        except Exception as error:
+            print "Something went wrong in accept func: " + str(error)
+            self.own_socket.close()
 
     def connect(self, server_address=("127.0.0.1", 10000)):
         try:
@@ -253,28 +254,19 @@ class TCP(object):
             self.own_socket.close()
 
     def close(self, connection=None):
-        # try:
+        try:
             if connection not in self.connections.keys():
                 if connection is None:
                     connection = self.connections.keys()[0]
                 else:
                     return "Connection not in connected devices"
             self.connections[connection].set_flags(fin=True)
-            # self.own_packet.flag_ack = 1
             self.connections[connection].seq += 1
             packet_to_send = pickle.dumps(self.connections[connection])
             self.own_socket.sendto(packet_to_send, connection)
             answer = self.find_correct_packet("ACK", connection)  # change cause may get a None value
             self.connections[connection].ack += 1
-            # while (answer.ack - 1) != self.own_packet.seq:
-            #     packet_to_send = pickle.dumps(self.own_packet)
-            #     self.own_socket.sendto(packet_to_send, self.receiver_address)
-            #     answer, address = self.own_socket.recvfrom(SENT_SIZE)
-            #     answer = pickle.loads(answer)
-            # self.own_packet.ack += 1
-            # self.own_packet.seq += 1
-            # packet_to_send = pickle.dumps(self.own_packet)
-            # self.own_socket.sendto(packet_to_send, self.receiver_address)
+            time.sleep(0.5)
             answer = self.find_correct_packet("DATA or FIN", connection)
             print answer
             if answer.flag_fin != 1:
@@ -289,17 +281,9 @@ class TCP(object):
                     self.connections.pop(connection)
                 if len(self.connections) == 0:
                     self.own_socket.close()
-
-                # self.status = 0
-
-            # while checksum_value != answer.checksum:
-            #     self.own_socket.sendto(self.own_packet, address)
-            #     answer, address = self.own_socket.recvfrom(SENT_SIZE)
-            #     answer = pickle.loads(answer)
-            #     checksum_value = TCP.checksum(answer.data)
-        # except Exception as error:
-        #     print "Something went wrong in close func:%s " % error
-
+        except Exception as error:
+            print "Something went wrong in the close func! Error is: %s." % error
+            
     def disconnect(self, connection):
         try:
             self.connections[connection].ack += 1
@@ -307,25 +291,11 @@ class TCP(object):
             self.connections[connection].set_flags(ack=True)
             packet_to_send = pickle.dumps(self.connections[connection])
             self.own_socket.sendto(packet_to_send, connection)
-            # answer, address = self.own_socket.recvfrom(SENT_SIZE)
-            # answer = pickle.loads(answer)
-            #checksum_value = TCP.checksum(answer.data)
-            # while checksum_value != answer.checksum:
-            #     self.own_socket.sendto(self.own_packet, address)
-            #     answer, address = self.own_socket.recvfrom(SENT_SIZE)
-            #     answer = pickle.loads(answer)
-            #     checksum_value = TCP.checksum(answer.data)
             self.connections[connection].set_flags(fin=True)
             self.connections[connection].seq += 1
             packet_to_send = pickle.dumps(self.connections[connection])
             self.own_socket.sendto(packet_to_send, connection)
             answer = self.find_correct_packet("ACK", connection)
-            # while (answer.ack - 1) != self.own_packet.seq:
-            #     packet_to_send = pickle.dumps(self.own_packet)
-            #     self.own_socket.sendto(packet_to_send, self.receiver_address)
-            #     answer, address = self.own_socket.recvfrom(SENT_SIZE)
-            #     answer = pickle.loads(answer)
-            # self.own_packet.ack += 1
             with self.connection_lock:
                 self.connections.pop(connection)
             if len(self.connections) == 0:
@@ -393,7 +363,7 @@ class TCP(object):
                 time.sleep(0.25)
 
     def central_receive_handler(self):
-        while True:
+        while True and self.status == 1:
             try:
                 packet, address = self.own_socket.recvfrom(1024)
                 packet = pickle.loads(packet)
@@ -401,7 +371,6 @@ class TCP(object):
             except socket.timeout:
                 continue
             except socket.error:
-                print "socket error"
                 continue
 
     def central_receive(self):

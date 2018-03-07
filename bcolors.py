@@ -17,5 +17,3 @@ class bcolors:
         self.FAIL = ''
         self.ENDC = ''
 
-print bcolors.RED + "jello"
-print 'hello'

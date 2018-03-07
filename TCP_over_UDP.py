@@ -8,7 +8,7 @@ import time
 
 DATA_DIVIDE_LENGTH = 1024
 TCP_PACKET_SIZE = 32
-DATA_LENGTH = 1024
+DATA_LENGTH = DATA_DIVIDE_LENGTH
 SENT_SIZE = TCP_PACKET_SIZE + DATA_LENGTH + 5000  # Pickled objects take a lot of space
 LAST_CONNECTION = -1
 FIRST = 0
@@ -108,15 +108,15 @@ class TCP(object):
         # each condition will have a dictionary of an address and it's corresponding packet.
         self.packets_received = {"SYN": {}, "ACK": {}, "SYN-ACK": {}, "DATA or FIN": {}}
 
+        self.central_receive()
+
     def __repr__(self):
         return "TCP()"
 
     def __str__(self):
-        return "Own Packet: %s" \
+        return "Connections: %s" \
                % str(self.connections)
 
-    # Every change of the sequence and acknowledgment numbers
-    #  needs to be changed to add the length of the packet itself too
     def send(self, data, connection=None):
         try:
             if connection not in self.connections.keys():
@@ -145,7 +145,7 @@ class TCP(object):
         except socket.error as error:
             print "Socket was closed before executing command. Error is: %s." % error
 
-    def recv(self, connection):
+    def recv(self, connection=None):
         try:
             data = ""
 
@@ -167,6 +167,7 @@ class TCP(object):
 
                     data_part = self.find_correct_packet("DATA or FIN", connection)
                     checksum_value = TCP.checksum(data_part.data)
+
                 data += data_part.data
                 self.connections[connection].ack = data_part.seq + len(data_part.data)
                 self.connections[connection].seq += 1  # syn flag is 1 byte
@@ -216,6 +217,7 @@ class TCP(object):
                     self.connections[address].seq += 1
                     self.connections[address].set_flags(ack=True, syn=True)
                     packet_to_send = pickle.dumps(self.connections[address])
+
                     #lock address, connections dictionary?
                     packet_not_sent_correctly = True
                     while packet_not_sent_correctly or answer is None:
@@ -227,6 +229,7 @@ class TCP(object):
                             packet_not_sent_correctly = True
                     self.connections[address].set_flags()
                     self.connections[address].ack = answer.seq + 1
+                    print address
                     return address
         except Exception as error:
             print "Something went wrong in accept func: " + str(error)
@@ -268,7 +271,6 @@ class TCP(object):
             self.connections[connection].ack += 1
             time.sleep(0.5)
             answer = self.find_correct_packet("DATA or FIN", connection)
-            print answer
             if answer.flag_fin != 1:
                 raise Exception("The receiver didn't send the fin packet")
             else:
@@ -281,6 +283,7 @@ class TCP(object):
                     self.connections.pop(connection)
                 if len(self.connections) == 0:
                     self.own_socket.close()
+                    self.status = 0
         except Exception as error:
             print "Something went wrong in the close func! Error is: %s." % error
             
@@ -298,9 +301,9 @@ class TCP(object):
             answer = self.find_correct_packet("ACK", connection)
             with self.connection_lock:
                 self.connections.pop(connection)
-            if len(self.connections) == 0:
-                self.own_socket.close()
-            # self.status = 0
+            # if len(self.connections) == 0:
+            #     self.own_socket.close()
+            #     self.status = 0
         except Exception as error:
             print "Something went wrong in disconnect func:%s " % error
 
@@ -365,7 +368,7 @@ class TCP(object):
     def central_receive_handler(self):
         while True and self.status == 1:
             try:
-                packet, address = self.own_socket.recvfrom(1024)
+                packet, address = self.own_socket.recvfrom(SENT_SIZE)
                 packet = pickle.loads(packet)
                 self.sort_answers(packet, address)
             except socket.timeout:
@@ -377,6 +380,3 @@ class TCP(object):
         t = threading.Thread(target=self.central_receive_handler)
         t.daemon = True
         t.start()
-
-
-

@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 import random
 import socket
-import sys
 import pickle
 import threading
 import time

@@ -6,18 +6,25 @@ import pickle
 import threading
 import time
 
+import crcmod
+crcmod.crc
 DATA_DIVIDE_LENGTH = 1024
+key="1011"
 TCP_PACKET_SIZE = 32
 DATA_LENGTH = DATA_DIVIDE_LENGTH
 SENT_SIZE = TCP_PACKET_SIZE + DATA_LENGTH + 5000  # Pickled objects take a lot of space
 LAST_CONNECTION = -1
 FIRST = 0
-
+HEADER_SIZE = 20
+MSS = 556
+HEADER_FORMAT = 'H H I I H b b 2s ' + str(MSS) + 's'
+PACKET_SIZE = HEADER_SIZE + MSS # should be 576
 
 class TCPPacket(object):
     """
     Add Documentation here
     """
+
     SMALLEST_STARTING_SEQ = 0
     HIGHEST_STARTING_SEQ = 9000  # 4294967295
 
@@ -127,6 +134,8 @@ class TCP(object):
             data_parts = TCP.data_divider(data)
             for data_part in data_parts:
                 data_not_received = True
+                crc32_func = crcmod.mkCrcFun(0x104c11db7, initCrc=0, xorOut=0xFFFFFFFF)
+                data_part= crc32_func.update(data_part)
                 checksum_of_data = TCP.checksum(data_part)
                 self.connections[connection].checksum = checksum_of_data
                 self.connections[connection].data = data_part
@@ -139,11 +148,11 @@ class TCP(object):
                         answer = self.find_correct_packet("ACK", connection)
 
                     except socket.timeout:
-                        print "timeout"
+                        print ("timeout")
                         data_not_received = True
                 self.connections[connection].seq += len(data_part)
         except socket.error as error:
-            print "Socket was closed before executing command. Error is: %s." % error
+            print ("Socket was closed before executing command. Error is: %s." % error)
 
     def recv(self, connection=None):
         try:
@@ -167,7 +176,9 @@ class TCP(object):
 
                     data_part = self.find_correct_packet("DATA or FIN", connection)
                     checksum_value = TCP.checksum(data_part.data)
-
+                print("/n")
+                data_part.data= codecs.decode(data_part.data.hexdigest(), "hex").decode('utf-8')
+                print(data_part.data)
                 data += data_part.data
                 self.connections[connection].ack = data_part.seq + len(data_part.data)
                 self.connections[connection].seq += 1  # syn flag is 1 byte
@@ -181,7 +192,7 @@ class TCP(object):
 
             return data
         except socket.error as error:
-            print "Socket was closed before executing command. Error is: %s." % error
+            print ("Socket was closed before executing command. Error is: %s." % error)
 
     # conditions = ["SYN", "SYN-ACK", "ACK", "FIN", "FIN-ACK", "DATA"]
     def listen_handler(self, max_connections):
@@ -198,13 +209,13 @@ class TCP(object):
                 except KeyError:
                     continue
         except socket.error as error:
-            print "Something went wrong in listen_handler func! Error is: %s." + str(error)
+            print ("Something went wrong in listen_handler func! Error is: %s." + str(error))
 
     def listen(self, max_connections=1):
         try:
             TCP.threader(func=self.listen_handler, args=(max_connections,), join=False, daemon=True)
         except Exception as error:
-            print "Something went wrong in listen func! Error is: %s." % str(error)
+            print ("Something went wrong in listen func! Error is: %s." % str(error))
 
     def accept(self):
         try:
@@ -229,10 +240,10 @@ class TCP(object):
                             packet_not_sent_correctly = True
                     self.connections[address].set_flags()
                     self.connections[address].ack = answer.seq + 1
-                    print address
+                    print (address)
                     return address
         except Exception as error:
-            print "Something went wrong in accept func: " + str(error)
+            print ("Something went wrong in accept func: " + str(error))
             self.own_socket.close()
 
     def connect(self, server_address=("127.0.0.1", 10000)):
@@ -253,7 +264,7 @@ class TCP(object):
             self.connections[server_address].set_flags()
 
         except socket.error as error:
-            print "Something went wrong in connect func: " + str(error)
+            print ("Something went wrong in connect func: " + str(error))
             self.own_socket.close()
 
     def close(self, connection=None):
@@ -285,7 +296,7 @@ class TCP(object):
                     self.own_socket.close()
                     self.status = 0
         except Exception as error:
-            print "Something went wrong in the close func! Error is: %s." % error
+            print ("Something went wrong in the close func! Error is: %s." % error)
             
     def disconnect(self, connection):
         try:
@@ -305,7 +316,7 @@ class TCP(object):
             #     self.own_socket.close()
             #     self.status = 0
         except Exception as error:
-            print "Something went wrong in disconnect func:%s " % error
+            print( "Something went wrong in disconnect func:%s " % error)
 
     @staticmethod
     def data_divider(data):
@@ -331,6 +342,7 @@ class TCP(object):
         answer = answer & 0xffff
         answer = answer >> 8 | (answer << 8 & 0xff00)
         return answer
+
 
     @staticmethod
     def threader(func, args, join=False, daemon=False):
@@ -380,3 +392,57 @@ class TCP(object):
         t = threading.Thread(target=self.central_receive_handler)
         t.daemon = True
         t.start()
+
+    @staticmethod
+
+    def xor(a , b):
+        result = []
+        for i in range(1, len(b)):
+            if a[i] == b[i]:
+                result.append('0')
+            else:
+                result.append('1')
+
+        return ''.join(result)
+
+
+    def mod2div(self,divident, divisor):
+
+        pick = len(divisor)
+        tmp = divident[0 : pick]
+        while pick < len(divident):
+            if tmp[0] == '1':
+                tmp = self.xor(divisor, tmp) + divident[pick]
+            else:
+                tmp = self.xor('0'*pick, tmp) + divident[pick]
+            pick += 1
+        if tmp[0] == '1':
+            tmp = self.xor(divisor, tmp)
+        else:
+            tmp = self.xor('0'*pick, tmp)
+
+        checkword = tmp
+        return checkword
+
+    def encodeData(self,data, key):
+
+        l_key = len(key)
+
+        # Appends n-1 zeroes at end of data
+        appended_data = data + '0'*(l_key-1)
+        remainder = self.mod2div(appended_data, key)
+
+        # Append remainder in the original data
+        codeword = data + remainder
+        return codeword
+
+    def decodeData(self,data , key):
+
+        l_key = len(key)
+
+        # Appends n-1 zeroes at end of data
+        appended_data = data + '0'*(l_key-1)
+        remainder = self.mod2div(appended_data, key)
+
+        return remainder
+

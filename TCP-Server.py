@@ -16,14 +16,15 @@ def handler(sock, address):
 
         if data == "Disconnected":
             print str(address[IP]) + ":" + str(address[PORT]) + " Disconnected."
+            for connection in connections:
+                sock.send('[b][color=#cc0000]' + str(address[IP]) + ":" + str(address[PORT])
+                          + " Disconnected." + '[/b][/color]', connection)
             connections.remove(address)
-            print connections
             break
         else:
             with connections_lock:
                 for connection in connections:
-                    if connection != address:
-                        sock.send(data, connection)
+                    sock.send(data, connection)
 
 
 def main():
@@ -41,6 +42,10 @@ def main():
         connection_thread.start()
         connections.append(address)
         print str(address[0]) + ":" + str(address[1]) + " Connected."
+        for connection in connections:
+            print connection
+            sock.send('[b][color=#00B200]' + str(address[0]) + ":" + str(address[1]) + " Connected."
+                      + '[/b][/color]', connection)
 
     sys.exit()
 

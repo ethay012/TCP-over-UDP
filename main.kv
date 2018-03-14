@@ -1,0 +1,129 @@
+#: import SwapTransition kivy.uix.screenmanager.SwapTransition
+#: import BooleanProperty kivy.properties
+#:import Factory kivy.factory.Factory
+#:import Utils kivy.utils
+
+<Button>:
+	background_normal: 'button_normal.png'
+	background_down: 'button_down.png'
+	border: (2, 2, 2, 2)
+	font_size: 30
+<MyPopup@Popup>:
+    auto_dismiss: False
+	title: "Welcome to chat"
+	size_hint: 0.5, 0.5
+	pos_hint: {"center_x": 0.5, "center_y":0.5}
+	GridLayout:
+		rows: 2
+		cols: 1
+		Label:
+			font_size: 20
+			pos_hint: {"right": 1, "center_y":0.5}
+			text: "Welcome to the chatroom!\nhere you can talk to everyone \nthat's currently connected to the server"
+		Button:
+			size_hint: 1, 0.2
+			text: 'Close'
+			on_release: root.dismiss()
+	
+ScreenManagement:
+	transition: SwapTransition()
+	WelcomeScreen:
+	ChatScreen:
+	
+<WelcomeScreen>:
+	name: "welcome_screen"
+	
+	Button:
+		id: connect_button
+		size_hint: 1, 0.25
+		text: "Connect"
+		on_release: root.get_info(name_input.text, ip_input.text, port_input.text)
+		pos_hint: {"right": 1, "top": 1}
+	
+	TextInput:
+		id: name_input
+		text: "Nickname"
+		multiline: False
+		font_size: 32
+		size_hint: 0.8, 0.2
+		pos_hint: {"center_x": 0.5, "center_y": 0.6}
+		
+	TextInput:
+		id: ip_input
+		text: "127.0.0.1"
+		multiline: False
+		font_size: 32
+		size_hint: 0.8, 0.2
+		pos_hint: {"center_x": 0.5, "center_y": 0.4}
+		
+	TextInput:
+		id: port_input
+		text: "10000"
+		multiline: False
+		font_size: 32
+		size_hint: 0.8, 0.2
+		pos_hint: {"center_x": 0.5, "center_y": 0.2}
+		
+		
+
+<ChatScreen>:
+	name: "chat_screen"
+	on_pre_enter: root.receiving_msg_handle1()
+	on_enter: Factory.MyPopup().open()
+	
+	
+	FloatLayout:
+		canvas.before:
+			Color:
+				rgba: 0, 0, 1, 1
+			Rectangle:
+				# self here refers to the widget i.e BoxLayout
+				pos: self.pos
+				size: self.size
+		Button:
+			background_normal: 'red_button_normal.png'
+			background_down: 'red_button_down.png'
+			font_size: 25
+			size_hint: 1, 0.1
+			text: "Disconnect"
+			on_release: root.close_connection()
+			on_release: app.root.current = "welcome_screen"
+			on_release: message_input.text = ""
+			on_release: chat_scroll_text.text = ""
+			pos_hint: {"right": 1, "top": 1}
+			
+		Button:
+			color: 0, 0, 1, 1
+			font_size: 50
+			size_hint: 0.3, 0.2
+			text: "Send"
+			pos_hint: {"right": 1, "bottom": 1}
+			on_release: root.send_message(message_input.text)
+
+		ScrollView:
+			size_hint: 1, 0.7
+			pos_hint: {"left": 1, "y": 0.2}
+			canvas.before:
+				Color:
+					rgba: 1, 1, 1, 1
+				Rectangle:
+					# self here refers to the widget i.e BoxLayout
+					pos: self.pos
+					size: self.size
+			Label:
+				id: chat_scroll_text
+				size_hint_y: None
+				height: self.texture_size[1]
+				text_size: self.width, None
+				color: 0,0,0,1
+				markup: True
+				text: ""
+
+			
+		TextInput:
+			id: message_input
+			multiline: False
+			font_size: 32
+			size_hint: 0.7, 0.2
+			pos_hint: {"left": 1, "bottom": 1}
+			on_text_validate: root.send_message(message_input.text)

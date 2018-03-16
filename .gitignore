@@ -1,2 +1,9 @@
 .idea
 *.pyc
+bcolors.py
+ReceivedPicture.jpg
+SentPicture.jpg
+TCP_Client.py
+TCP_Client.pyc
+udp-client-test.py
+udp-server-test.py
